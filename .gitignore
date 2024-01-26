@@ -1,2 +1,6 @@
 /audio
 /venv
+/liopus
+poetry.lock
+pyproject.toml
+replit.nix
