@@ -38,5 +38,6 @@ bot = commands.Bot(command_prefix='$',
 async def setup_hook():
   await bot.load_extension("apv1")
 
+print(os.getcwd())
 keep_alive()
 bot.run(TOKEN)

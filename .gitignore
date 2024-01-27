@@ -2,4 +2,6 @@
 /venv
 /libopus
 /__pycache__
-/bin
+.Identifier
+.dll
+.exe
