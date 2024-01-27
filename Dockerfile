@@ -8,6 +8,6 @@ RUN cp -r ./ffmpeg-master-latest-win64-gpl-shared/bin/* ./
 RUN rm ./ffmpeg-master-latest-win64-gpl-shared.zip
 RUN rm -dr ./ffmpeg-master-latest-win64-gpl-shared
 RUN chmod a+x *
-RUN getconf LONG_BIT
+RUN ls
 COPY . /bot
 CMD python main.py
