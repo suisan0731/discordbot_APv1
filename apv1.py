@@ -64,7 +64,7 @@ class AudioStatus:
         asyncio.create_task(self.leave())
       self.now_title = title
       self.now_filename = filename
-      src = discord.FFmpegPCMAudio(self.now_filename, **ffmpeg_options, executable="ffmpeg/bin/ffmpeg.exe")
+      src = discord.FFmpegPCMAudio(self.now_filename, **ffmpeg_options, executable="./bin/ffmpeg.exe")
       src_adj = discord.PCMVolumeTransformer(src, volume=0.6)
       self.ctx.guild.voice_client.play(src_adj, after=self.play_next)
       await self.ctx.channel.send('```{} を再生します```'.format(self.now_title))
