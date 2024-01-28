@@ -32,7 +32,7 @@ class MyhelpCommand(commands.HelpCommand):
 bot = commands.Bot(command_prefix='$',
                    intents=intents,
                    help_command=MyhelpCommand())
-#discord.opus.load_opus('libopus/lib/libopus.so')
+discord.opus.load_opus('libopus/lib/libopus.so')
 
 @bot.event
 async def setup_hook():
