@@ -1,4 +1,4 @@
 /audio
 /venv
 /__pycache__
-/libopus
+/ffmpeg-6.1-amd64-static
