@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import os
 from keep_alive import keep_alive
+from apv1 import AudioCog
 
 TOKEN = os.environ['DISCORD_TOKEN']
 
@@ -14,7 +15,11 @@ class MyhelpCommand(commands.HelpCommand):
     super().__init__(command_attrs={"brief": "ヘルプを表示"})
 
   async def send_bot_help(self, mapping) -> None:
-    cmds = mapping[None]
+    cmds = []
+    for cogs in mapping.values():
+      for cmd in cogs:
+        cmds.append(cmd) 
+
     cmds_max_length = max([len(cmd.name) for cmd in cmds])
     txt = '```'
     for cmd in cmds:
@@ -38,6 +43,5 @@ discord.opus.load_opus('libopus/lib/libopus.so')
 async def setup_hook():
   await bot.load_extension("apv1")
 
-print(os.getcwd())
 keep_alive()
 bot.run(TOKEN)

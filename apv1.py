@@ -40,6 +40,7 @@ class AudioStatus:
   def __init__(self, ctx):
     self.ctx = ctx
     self.now_title = None
+    self.mode = 'single'
     self.loop = 0
     self.now_filename = None
     self.queue = AudioQueue()
@@ -52,6 +53,8 @@ class AudioStatus:
     filename = ydl.prepare_filename(res)
     title = res['title']
     await self.queue.put([filename, title])
+    if self.mode == 'single' and self.ctx.guild.voice_client.is_playing:
+      self.ctx.guild.voice_client.stop()
     return title
 
   async def playing_task(self):
@@ -69,22 +72,20 @@ class AudioStatus:
       await self.ctx.channel.send('```{} を再生します```'.format(self.now_title))
       await self.playing.wait()
       if self.loop == 1:
-        await self.queue.put([self.now_filename, self.now_title])
-      elif self.loop == 2:
-        self.loop = 0
+          await self.queue.put([self.now_filename, self.now_title])
 
   def play_next(self, err=None):
-    if self.loop == 2:
-      src = discord.FFmpegPCMAudio(self.now_filename, **ffmpeg_options, executable="ffmpeg-6.1-amd64-static/ffmpeg")
-      src_adj = discord.PCMVolumeTransformer(src, volume=0.6)
-      self.ctx.guild.voice_client.play(src_adj, after=self.play_next)
-    else:
-      self.playing.set()
+    self.playing.set()
 
   async def leave(self):
     self.queue.reset()
     if self.ctx.guild.voice_client:
       await self.ctx.guild.voice_client.disconnect()
+
+  async def stop(self):
+    self.queue.reset()
+    self.loop = 0
+    self.ctx.guild.voice_client.stop()
 
 
 class AudioCog(commands.Cog):
@@ -106,7 +107,7 @@ class AudioCog(commands.Cog):
       return 0
     return 1
 
-  @commands.command(name='join', brief='ボイスチャットに参加する')
+  @commands.command(name='join', brief='$joinコマンドを打ったユーザが参加しているボイスチャンネルに参加する。')
   async def join(self, ctx):
     if ctx.author.voice is None:
       await ctx.channel.send("```あなたはボイスチャンネルに接続していません```")
@@ -122,7 +123,7 @@ class AudioCog(commands.Cog):
     self.audio_status[ctx.guild.id] = AudioStatus(ctx)
 
 
-  @commands.command(name='leave', brief='ボイスチャットから退出する')
+  @commands.command(name='leave', brief='ボイスチャンネルから退出する。')
   async def leave(self, ctx):
     status = self.audio_status.get(ctx.guild.id)
     if ctx.author.voice is None:
@@ -135,22 +136,41 @@ class AudioCog(commands.Cog):
     await ctx.channel.send('```{} チャンネルを退出しました```'.format(
         ctx.author.voice.channel.name))
     del self.audio_status[ctx.guild.id]
-
-
-  @commands.command(name='play', brief='$play <YouTbe URL> で音楽を再生する')
-  async def play(self, ctx, *, url=None):
-    if url is None:
-      await ctx.channel.send("```コマンドが不正です```")
+  
+  @commands.command(name='mode', brief=
+                    '''$mode <mode>で再生リストモードかシングルモードかを指定する。初期値はsingle。
+list - 再生リストモード。$loopコマンドは再生リスト全体でループ、$playコマンドは再生リストに追加し、順番になったら再生される。
+single - シングルモード。$loopコマンドは一つの曲をループ、$playコマンドは今の曲を停止し、直ちに再生される。''')
+  async def mode(self, ctx, mode='single'):
+    status = self.audio_status.get(ctx.guild.id)
+    if ctx.author.voice is None:
+      await ctx.channel.send('```あなたはボイスチャンネルに接続していません```')
       return
+    elif status is None:
+      await ctx.channel.send('```Botがボイスチャンネルに接続していません ```')
+      return
+    if status.mode == mode:
+      await ctx.channel.send('```すでに{} モードです```'.format(status.mode))
+    elif mode in ['single', 'list']:
+      status.mode = mode
+      if ctx.guild.voice_client.is_playing:
+        await status.stop()
+      await ctx.channel.send('```{} モードに切り替えました```'.format(status.mode))
+    else:
+      await ctx.channel.send('```コマンドが不正です```')
+
+  @commands.command(name='play', brief='$play <url>でYouTubeの音楽を再生する。')
+  async def play(self, ctx, url):
     status = self.audio_status.get(ctx.guild.id)
     if status is None or ctx.guild.voice_client.channel != ctx.author.voice.channel:
       await ctx.invoke(self.join)
       status = self.audio_status.get(ctx.guild.id)
     title = await status.add_audio(url)
-    await ctx.channel.send('```{} を再生リストに追加しました```'.format(title))
+    if status.mode == 'list':
+      await ctx.channel.send('```{} を再生リストに追加しました```'.format(title))
+  
 
-
-  @commands.command(name='pause', brief='音楽を一時中断する $resumeで再開可能')
+  @commands.command(name='pause', brief='音楽を一時中断する。$resumeで再開可能。')
   async def pause(self, ctx):
     if not await self.check_playing_audio(ctx):
       return 
@@ -169,38 +189,44 @@ class AudioCog(commands.Cog):
     await ctx.channel.send("```{} の再生を再開しました```".format(status.now_title))
 
 
-  @commands.command(name='stop', brief='音楽を停止する 再開はできない')
+  @commands.command(name='stop', brief='音楽を停止する。再開はできない。')
   async def stop(self, ctx):
     if not await self.check_playing_audio(ctx):
       return 
-    ctx.guild.voice_client.stop()
     status = self.audio_status.get(ctx.guild.id)
-    await ctx.channel.send("```{} の再生を中止しました```".format(status.now_title))
-
-
-  @commands.command(name='loop',
-              brief='$loop <this, list>\n- this この曲をループ\n- list 再生リストをループ')
-  async def loop(self, ctx, *, loop_type=None):
+    await status.stop()
+    await ctx.channel.send("```再生を中止しました```")
+  
+  @commands.command(name='next', brief='再生リストモードの場合、今の曲をスキップし、再生リスト中の次の曲を再生する。')
+  async def next(self, ctx):
     if not await self.check_playing_audio(ctx):
       return
     status = self.audio_status.get(ctx.guild.id)
-    if loop_type == 'list':
-      if status.loop == 1:
-        await ctx.channel.send('```すでに再生リストをループ再生しています```')
-        return
-      status.loop = 1
-      await ctx.channel.send('```再生リストをループ再生します```')
-    elif loop_type == 'this':
-      if status.loop == 2:
+    if status.mode == 'single':
+      await ctx.channel.send("```再生リストをループ再生していません```")
+      return
+    ctx.guild.voice_client.stop()
+
+
+  @commands.command(name='loop', brief='ループ再生する。')
+  async def loop(self, ctx):
+    if not await self.check_playing_audio(ctx):
+      return
+    status = self.audio_status.get(ctx.guild.id)
+    if status.loop:
+      if status.mode == 'single':
         await ctx.channel.send('```すでに{} をループ再生しています```'.format(status.now_title))
-        return
-      status.loop = 2
+      else:
+        await ctx.channel.send('```すでに再生リストをループ再生しています```')
+      return
+    status.loop = 1
+    if status.mode == 'single':
       await ctx.channel.send('```{} をループ再生します```'.format(status.now_title))
     else:
-      await ctx.channel.send('```コマンドが不正です```')
+      await ctx.channel.send('```再生リストをループ再生します```')
 
 
-  @commands.command(name='unloop', brief='ループを停止する')
+  @commands.command(name='unloop', brief='ループを停止する。')
   async def unloop(self, ctx):
     if not await self.check_playing_audio(ctx):
       return 
