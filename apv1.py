@@ -113,7 +113,7 @@ class AudioCog(commands.Cog):
     return 0
 
 
-  @commands.command(name='join', brief='$joinコマンドを打ったユーザが参加しているボイスチャンネルに参加する。')
+  @commands.command(name='join', brief='このコマンドを打ったユーザが参加しているボイスチャンネルに参加する。')
   async def join(self, ctx):
     if ctx.author.voice is None:
       await ctx.channel.send("```あなたはボイスチャンネルに接続していません```")
